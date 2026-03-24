@@ -1,0 +1,53 @@
+services:
+  zookeeper:
+    image: quay.io/debezium/zookeeper:2.5
+    ports:
+      - 2181:2181
+  kafka:
+    image: quay.io/debezium/kafka:2.5
+    ports:
+      - 29092:29092
+    depends_on:
+      - zookeeper
+    environment:
+      - ZOOKEEPER_CONNECT=zookeeper:2181
+      - BROKER_ID=1
+      - KAFKA_LISTENERS=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:29092
+      - KAFKA_ADVERTISED_LISTENERS=INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=INTERNAL
+  oracle:
+    image: gvenzl/oracle-free:23-slim-faststart
+    # A imagem 'slim-faststart' do gvenzl é muito mais leve e rápida para POCs que a oficial
+    ports:
+      - 1521:1521
+    environment:
+      - ORACLE_PASSWORD=oracle
+      # - ORACLE_DATABASE=FREEPDB1
+      - APP_USER=test
+      - APP_USER_PASSWORD=test
+    volumes:
+      - ./init.sql:/container-entrypoint-initdb.d/init.sql:ro
+    # healthcheck:
+    #   test: ["CMD", "healthcheck.sh"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 10
+    #   start_period: 5s
+    #   start_interval: 5s
+  connect:
+    image: quay.io/debezium/connect:3.4
+    ports:
+      - 8083:8083
+    depends_on:
+      - kafka
+      - oracle
+    volumes:
+      # Mapeia o driver baixado para dentro do container
+      - ./oracle-drivers/ojdbc17.jar:/kafka/connect/debezium-connector-oracle/ojdbc17.jar:Z
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:9092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - STATUS_STORAGE_TOPIC=my_connect_statuses
